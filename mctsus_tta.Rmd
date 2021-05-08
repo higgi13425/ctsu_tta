@@ -1,0 +1,39 @@
+---
+title: "Quality Control of M-CTSU Time To Activation (TTA)"
+author: "Peter Higgins"
+date: "5/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(readxl)
+library(janitor)
+library(qcc)
+library(ggQC)
+library(qicharts2)
+```
+
+# "Quality Control of M-CTSU Time To Activation (TTA)"
+
+## Reading in Data
+
+We will start by reading in data received from Kate Huffman from May 4, 2021.
+
+```{r data}
+ttadata <- readxl::read_excel("Time to Activation 5.4.2021.xlsx", sheet = "Time to Activation 5.4.21") %>% 
+  clean_names() %>% # clean names, then dates
+  mutate(irb_final_approval = excel_numeric_to_date(as.numeric(irb_final_approval)), irb_application_submitted = excel_numeric_to_date(as.numeric(irb_application_submitted)),
+  billing_calendar_received = excel_numeric_to_date(as.numeric(billing_calendar_received)),
+   care_designations_completed = excel_numeric_to_date(as.numeric(care_designations_completed)),
+  internal_budget_finished = excel_numeric_to_date(as.numeric(internal_budget_finished)),     
+  pi_approved_budget = excel_numeric_to_date(as.numeric(pi_approved_budget)),   budget_negotiations_start = excel_numeric_to_date(as.numeric(budget_negotiations)),  final_budget = excel_numeric_to_date(as.numeric(final_budget)),          paf_routed = excel_numeric_to_date(as.numeric(paf_routed)), 
+    contract_executed= excel_numeric_to_date(as.numeric(contract_executed)),      pan_released = excel_numeric_to_date(as.numeric(pan_released)),           open_to_accrual = excel_numeric_to_date(as.numeric(open_to_accrual))
+    ) %>% # now clean up prior math
+  select(-feasibility_approval_to_irb_application_submitted) %>% 
+  select(-feasibility_approval_to_internal_budget_finished) %>% 
+  select(-budget_negotiations_to_final_budget) %>% 
+  select(-feasibility_approval_to_paf_routed) %>% 
+  select(-budget_negotiations)
+```
