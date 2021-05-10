@@ -92,7 +92,7 @@ ttadata %>%
   drop_na(intake_form_completed, time_intake_feasibility) %>% 
   arrange(intake_form_completed) %>% 
 ggplot(aes(x = intake_form_completed-17897, 
-           y = int_intake_feasibility)) + #init ggplot
+           y = time_intake_feasibility)) + #init ggplot
   geom_point() + geom_line() + #add the points and lines
   stat_QC(method = "XmR", #specify QC charting method
       auto.label = T, # Use Autolabels
@@ -148,7 +148,7 @@ ttadata %>% runcharter(
           direction = "both", 
           grpvar = sponsor_type,
           datecol = intake_form_completed,
-          yval = time_feasibility_irb_subm,
+          yval = time_feasibility_irbsubm,
            line_colr = "gray80",
            line_size = 0.5,
            point_colr = "cadetblue",
@@ -192,7 +192,7 @@ ttadata %>% runcharter(
           direction = "both", 
           grpvar = sponsor_type,
           datecol = intake_form_completed,
-          yval = time_feasibility_irb_subm,
+          yval = time_feasibility_irbsubm,
            line_colr = "gray80",
            line_size = 0.5,
            point_colr = "cadetblue",
@@ -236,7 +236,7 @@ ttadata %>% runcharter(
           direction = "both", 
           grpvar = sponsor_type,
           datecol = intake_form_completed,
-          yval = time_feasibility_bcrecvd,
+          yval = time_bcrecvd_feasibility,
            line_colr = "gray80",
            line_size = 0.5,
            point_colr = "cadetblue",
