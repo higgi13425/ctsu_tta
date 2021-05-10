@@ -6,20 +6,26 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+# set options and load libraries
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(readxl)
 library(janitor)
+library(visdat)
+library(naniar)
 library(qcc)
 library(ggQC)
 library(qicharts2)
+library(runcharter)
+library(data.table)
+library(scales)
 ```
 
 # "Quality Control of M-CTSU Time To Activation (TTA)"
 
 ## Reading in Data
 
-We will start by reading in data received from Kate Huffman from May 4, 2021.
+We will start by reading in data received from Kate Huffman from May 4, 2021. Then clean up variable names, then clean up messy excel dates, then remove calculated fields. The result is saved as the object, ttadata.
 
 ```{r data}
 ttadata <- readxl::read_excel("Time to Activation 5.4.2021.xlsx", sheet = "Time to Activation 5.4.21") %>% 
@@ -35,5 +41,435 @@ ttadata <- readxl::read_excel("Time to Activation 5.4.2021.xlsx", sheet = "Time 
   select(-feasibility_approval_to_internal_budget_finished) %>% 
   select(-budget_negotiations_to_final_budget) %>% 
   select(-feasibility_approval_to_paf_routed) %>% 
-  select(-budget_negotiations)
+  select(-budget_negotiations) %>% # clean up dates
+  mutate(feasibility_approval = as.Date(as.POSIXct(feasibility_approval,tz="Detroit"))) %>% mutate(intake_form_completed = as.Date(as.POSIXct(intake_form_completed,tz="Detroit"))) %>%#now relocate cols
+  relocate(.after = "irb_application_submitted", "irb_final_approval" ) %>% 
+  relocate(.after = "billing_calendar_received", "internal_budget_finished", "pi_approved_budget", "budget_negotiations_start", "final_budget")
+```
+
+## Exploring Missing Data (NAs)
+
+```{r}
+visdat::vis_dat(ttadata)
+```
+
+## Calculating Intervals in Days
+
+Now we will add variables for calculated intervals in days. Start with intake to feasibility approval.
+
+```{r}
+ttadata <- ttadata %>% 
+  mutate(time_intake_feasibility = as.numeric(feasibility_approval - intake_form_completed)) %>% 
+  mutate(time_feasibility_irbsubm=as.numeric(irb_application_submitted - feasibility_approval)) %>% 
+  mutate(time_irbsubm_irbfinal = as.numeric(irb_final_approval - irb_application_submitted)) %>% 
+  mutate(time_bcrecvd_feasibility=as.numeric(feasibility_approval - billing_calendar_received)) %>% 
+  mutate(time_bcrecvd_intbudgdone=as.numeric(internal_budget_finished - billing_calendar_received)) %>% 
+  mutate(time_intbudgfinal_piapp=as.numeric(pi_approved_budget - internal_budget_finished)) %>% 
+  mutate(time_piapp_budgetnegstart=as.numeric(budget_negotiations_start - pi_approved_budget)) %>% 
+  mutate(time_budgetnegstart_finalbudget=as.numeric(final_budget - budget_negotiations_start)) %>% 
+  mutate(time_piappbudg_budgetnegstart=as.numeric(final_budget - budget_negotiations_start)) %>% 
+  mutate(time_irbfinal_pafrouted=as.numeric(irb_final_approval - paf_routed)) %>% 
+  mutate(time_finalbudg_pafrouted=as.numeric(paf_routed - final_budget)) %>% 
+  mutate(time_pafrouted_panreleased=as.numeric(pan_released - paf_routed)) %>% 
+  mutate(time_panrel_open2accrual=as.numeric(open_to_accrual - pan_released)) %>% 
+  mutate(time_contrexec_panrel=as.numeric(pan_released - contract_executed)) %>%  mutate(time_finalbudget_contrexec=as.numeric(contract_executed - final_budget)) %>%
+  mutate(time_feasib_contrexec=as.numeric(contract_executed - feasibility_approval)) %>%
+  mutate(time_irbfinal_contrexec=as.numeric(contract_executed - irb_final_approval))
+
+ttadata %>% ggplot(aes(time_intake_feasibility)) + geom_histogram(binwidth = 5)
+```
+
+## Consider filtering by sponsor_type = "Industry"
+
+## Consider faceting by CTSU
+
+## Testing out the ggQC package
+
+Start with a XmR plot of the interval from intake to feasibility approval.
+
+```{r}
+ttadata %>% 
+  drop_na(intake_form_completed, time_intake_feasibility) %>% 
+  arrange(intake_form_completed) %>% 
+ggplot(aes(x = intake_form_completed-17897, 
+           y = int_intake_feasibility)) + #init ggplot
+  geom_point() + geom_line() + #add the points and lines
+  stat_QC(method = "XmR", #specify QC charting method
+      auto.label = T, # Use Autolabels
+      label.digits = 2, #Use two digit in the label
+      show.1n2.sigma = T  #Show 1 and two sigma lines
+          ) +  
+  stat_QC(method="mR") +
+  scale_x_continuous(expansion(mult = 1.15)) + # Pad the x-axis
+  labs(x = "Days Since Jan 1, 2019",
+       y = "Time from Intake Form to Feasibility Approval")
+```
+
+Now try a QC violations plot.
+
+```{r}
+QC_Violations <- 
+  ggplot(ttadata, aes(x = intake_form_completed, y = time_intake_feasibility)) + #init ggplot
+  stat_qc_violations(method = "XmR" 
+       #show.facets = 4 #if you just want facet 4
+                     )
+QC_Violations
+```
+
+## Testing the Runcharter package
+
+### Runcharter with time from intake to feasibility approval
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_intake_feasibility,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Intake Form to Feasibility Approval",
+            chart_subtitle = "Industry Trials only",
+            labs(y = "Days"))
+```
+
+### Runcharter with time to IRB submission
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_feasibility_irb_subm,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Feasibility Approval to IRB Submission",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time at IRB
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_irbsubm_irbfinal,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from IRB Submission to Final Approval",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with time to IRB submission
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_feasibility_irb_subm,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Feasibility Approval to IRB Submission",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Billing Calendar Received to Internal Budget Done
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_bcrecvd_intbudgdone,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Billing Calendar Received to Internal Budget Done",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Rncharter with Time from billing calendar received to Internal Budget Done
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_feasibility_bcrecvd,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Feasibility Approval to Billing Calendar Received",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Internal Budget Done to PI approval
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_intbudgfinal_piapp,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Internal Budget Done to PI approval",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from PI approval of internal budget to start budget negotiation
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_piappbudg_budgetnegstart,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from PI approval to Start of Budget Negotiations",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Start of Budget Negotiation to Final Budget
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_budgetnegstart_finalbudget,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Start of Budget Negotiations to Final Budget",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+
+### Runcharter with Time from Final Budget to Contract Executed
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_finalbudget_contrexec,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Final Budget to Contract Executed",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Final IRB to PAF routed
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_irbfinal_pafrouted,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Final IRB to PAF Routed",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Final IRB to Contract Executed
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_irbfinal_contrexec,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Final IRB to Contract Executed",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from PAF Routed to PAN Releaased
+
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval =  time_pafrouted_panreleased,
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from PAF Routed to PAN Released",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Contract Executed to PAN Releaased
+
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_contrexec_panrel, 
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Contract Executed to PAN Released",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from Feasibility Approved to Contract Executed 
+
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_feasib_contrexec, 
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from Feasibility Approval to Contract Executed",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
+```
+
+### Runcharter with Time from PAN Released to Open To Accrual
+
+
+```{r}
+ttadata %>% runcharter(
+          med_rows = 15,
+          runlength = 8,
+          direction = "both", 
+          grpvar = sponsor_type,
+          datecol = intake_form_completed,
+          yval = time_panrel_open2accrual, 
+           line_colr = "gray80",
+           line_size = 0.5,
+           point_colr = "cadetblue",
+           highlight_fill = "yellow",
+           highlight_point_size = 1.5,
+           point_size = 1,
+            chart_title = "Time from PAN Release to Open to Accrual",
+            chart_subtitle = "Industry Trials only",
+            chart_breaks = "3 month",
+            labs(y = "Days"))
 ```
