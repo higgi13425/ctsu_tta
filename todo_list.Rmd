@@ -1,0 +1,59 @@
+---
+title: "todo_list"
+author: "Peter Higgins"
+date: "5/11/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## To Do List
+
+1.  experiment with {qicharts2}
+
+2.  Try {qcc} again? Find a better vignette?
+
+3.  Look at Date CTRF routed to ORSP
+
+4.  Look at Planning mtg completed
+
+5.  Calculate new intervals with nodes on slide 3
+
+6.  compare final dates on 3 processes
+
+    1.  budget - ends with PAF routed date
+
+    2.  IRB - ends with final approval
+
+    3.  contract - is there an ORSP time stamp?
+
+Kate looked into the Contract Executed Date and why we don't have this populated for the majority of studies and found we weren't tracking it previously. It was just added to the latest version of our task list.
+
+Metrics from Kate
+
+Metrics I think would be important to look at:
+
+-   Planning Meeting Completed to Internal Budget Finished
+
+    -   If all the information is discussed and available at the planning meeting, this should be a quick turnaround \~ 2 weeks?
+
+-   Feasibility Approved to IRB Submitted (I believe you already have this)
+
+-   PI Approved Budget to Budget Negotiations
+
+    -   From the time the PI approves the budget, how long are we waiting to start negotiations with the sponsor
+
+-   Budget Negotiations to Final Budget
+
+    -   Time it takes to negotiate the budget with the sponsor
+
+-   I'd be curious to see the final date for each parallel process on slide 3 in the PowerPoint I sent you earlier. Who are we typically waiting on, contract budget or regulatory?
+
+    -   PAF Routed Date= budget negotiation is done; end of the finance workflow
+
+    -   ?? Not sure there is a date or status we could pull for ORSP to know when they are done with the contract language and are either waiting on the budget or IRB approval.
+
+    -   IRB Final Approval -- end of the regulatory workflow
